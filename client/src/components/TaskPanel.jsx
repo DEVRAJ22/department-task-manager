@@ -6,34 +6,6 @@ function todayStr() {
   return new Date().toISOString().split('T')[0];
 }
 
-function StatusTracker({ history }) {
-  if (!history?.length) return null;
-
-  return (
-    <div className="status-tracker">
-      <h3>Stage Tracker</h3>
-      <div className="tracker-timeline">
-        {history.map((entry, i) => (
-          <div key={entry.id} className="tracker-item">
-            <div className="tracker-dot" />
-            {i < history.length - 1 && <div className="tracker-line" />}
-            <div className="tracker-content">
-              <div className="tracker-status">{entry.status}</div>
-              <div className="tracker-date">
-                {new Date(entry.changed_at).toLocaleDateString()} {new Date(entry.changed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </div>
-              <div className="tracker-meta">
-                {entry.changed_by_name || 'System'}
-                {entry.note ? ` — ${entry.note}` : ''}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function FileList({ files, onDelete, pending, onRemovePending }) {
   if (!files?.length && !pending?.length) return null;
   return (
@@ -82,11 +54,14 @@ export default function TaskPanel({ task, defaultStatus, onClose, onUpdate, onCr
   const [files, setFiles] = useState([]);
   const [pendingFiles, setPendingFiles] = useState([]);
   const [pendingCommentFiles, setPendingCommentFiles] = useState([]);
-  const [history, setHistory] = useState([]);
   const [reminder, setReminder] = useState({ active: false, reminder_type: 'daily', days: [] });
   const [newComment, setNewComment] = useState('');
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadMessage, setUploadMessage] = useState('Uploading file...');
   const [error, setError] = useState('');
+
+  const blocked = saving || uploading;
 
   const allowedStatuses = isAdmin || canVerify
     ? STATUSES
@@ -105,17 +80,14 @@ export default function TaskPanel({ task, defaultStatus, onClose, onUpdate, onCr
       Promise.all([
         api.getComments(task.id),
         api.getTaskFiles(task.id),
-        api.getTaskHistory(task.id),
         api.getTaskReminder(task.id),
-      ]).then(([commentsData, filesData, historyData, reminderData]) => {
+      ]).then(([commentsData, filesData, reminderData]) => {
         setComments(commentsData);
         setFiles(filesData);
-        setHistory(historyData);
         if (reminderData) {
           setReminder({ ...reminderData, days: JSON.parse(reminderData.days || '[]'), active: !!reminderData.active });
         }
       }).catch(console.error);
-      api.markTaskViewed(task.id).catch(() => {});
     }
   }, [task, user, isAdmin, canAssign]);
 
@@ -124,9 +96,13 @@ export default function TaskPanel({ task, defaultStatus, onClose, onUpdate, onCr
   };
 
   const uploadPendingFiles = async (taskId, fileList) => {
-    for (const file of fileList) {
-      await api.uploadTaskFile(taskId, file);
+    const uploaded = [];
+    for (let i = 0; i < fileList.length; i++) {
+      setUploadMessage(`Uploading file ${i + 1} of ${fileList.length}...`);
+      const file = await api.uploadTaskFile(taskId, fileList[i]);
+      uploaded.push(file);
     }
+    return uploaded;
   };
 
   const handleSave = async () => {
@@ -145,7 +121,11 @@ export default function TaskPanel({ task, defaultStatus, onClose, onUpdate, onCr
       if (isNew) {
         const created = await api.createTask(data);
         if (pendingFiles.length) {
-          await uploadPendingFiles(created.id, pendingFiles);
+          setUploading(true);
+          setUploadMessage('Uploading attachments...');
+          const uploaded = await uploadPendingFiles(created.id, pendingFiles);
+          setPendingFiles([]);
+          setFiles(uploaded);
         }
         if (reminder.active) {
           await api.setTaskReminder(created.id, reminder);
@@ -155,19 +135,20 @@ export default function TaskPanel({ task, defaultStatus, onClose, onUpdate, onCr
       } else {
         const updated = await api.updateTask(task.id, data);
         if (pendingFiles.length) {
-          await uploadPendingFiles(task.id, pendingFiles);
+          setUploading(true);
+          setUploadMessage('Uploading attachments...');
+          const uploaded = await uploadPendingFiles(task.id, pendingFiles);
           setPendingFiles([]);
-          const refreshed = await api.getTaskFiles(task.id);
-          setFiles(refreshed);
+          setFiles((prev) => [...uploaded, ...prev]);
         }
         await api.setTaskReminder(task.id, reminder);
         onUpdate?.(updated);
-        api.getTaskHistory(task.id).then(setHistory).catch(console.error);
       }
     } catch (err) {
       setError(err.message);
     } finally {
       setSaving(false);
+      setUploading(false);
     }
   };
 
@@ -184,11 +165,15 @@ export default function TaskPanel({ task, defaultStatus, onClose, onUpdate, onCr
   const handleAddComment = async (e) => {
     e.preventDefault();
     if (!newComment.trim() && !pendingCommentFiles.length) return;
+    setUploading(true);
+    setUploadMessage('Posting comment...');
+    setError('');
     try {
       const comment = await api.addComment(task.id, newComment.trim() || '(attachment)');
-      let uploadedFiles = [];
-      for (const file of pendingCommentFiles) {
-        const uploaded = await api.uploadCommentFile(comment.id, file);
+      const uploadedFiles = [];
+      for (let i = 0; i < pendingCommentFiles.length; i++) {
+        setUploadMessage(`Uploading attachment ${i + 1} of ${pendingCommentFiles.length}...`);
+        const uploaded = await api.uploadCommentFile(comment.id, pendingCommentFiles[i]);
         uploadedFiles.push(uploaded);
       }
       setComments((prev) => [...prev, { ...comment, files: uploadedFiles }]);
@@ -196,30 +181,45 @@ export default function TaskPanel({ task, defaultStatus, onClose, onUpdate, onCr
       setPendingCommentFiles([]);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setUploading(false);
     }
   };
 
-  const handleTaskFileSelect = (e) => {
+  const handleTaskFileSelect = async (e) => {
     const selected = Array.from(e.target.files || []);
     if (!selected.length) return;
+    e.target.value = '';
 
     if (isNew) {
       setPendingFiles((prev) => [...prev, ...selected]);
-    } else if (task) {
-      Promise.all(selected.map((f) => api.uploadTaskFile(task.id, f)))
-        .then((uploaded) => setFiles((prev) => [...uploaded, ...prev]))
-        .catch((err) => setError(err.message));
+      return;
     }
-    e.target.value = '';
+
+    setUploading(true);
+    setError('');
+    try {
+      for (let i = 0; i < selected.length; i++) {
+        setUploadMessage(`Uploading file ${i + 1} of ${selected.length}...`);
+        const uploaded = await api.uploadTaskFile(task.id, selected[i]);
+        setFiles((prev) => [uploaded, ...prev]);
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setUploading(false);
+    }
   };
 
   const handleCommentFileSelect = (e) => {
     const selected = Array.from(e.target.files || []);
-    if (selected.length) setPendingCommentFiles((prev) => [...prev, ...selected]);
+    if (!selected.length) return;
+    setPendingCommentFiles((prev) => [...prev, ...selected]);
     e.target.value = '';
   };
 
   const handleDeleteFile = async (fileId) => {
+    if (blocked) return;
     try {
       await api.deleteFile(fileId);
       setFiles((prev) => prev.filter((f) => f.id !== fileId));
@@ -239,16 +239,26 @@ export default function TaskPanel({ task, defaultStatus, onClose, onUpdate, onCr
 
   return (
     <>
-      <div className="panel-overlay" onClick={onClose} />
+      <div className="panel-overlay" onClick={blocked ? undefined : onClose} />
       <div className="task-panel">
         <div className="task-panel-header">
           <h2>{isNew ? 'New Task' : 'Task Details'}</h2>
-          <button className="panel-close" onClick={onClose}>&times;</button>
+          <button className="panel-close" onClick={onClose} disabled={blocked}>&times;</button>
         </div>
 
         <div className="task-panel-body">
+          {uploading && (
+            <div className="upload-overlay">
+              <div className="upload-overlay-content">
+                <div className="upload-spinner" />
+                <p>{uploadMessage}</p>
+              </div>
+            </div>
+          )}
+
           {error && <div className="alert alert-error">{error}</div>}
 
+          <fieldset className="task-panel-fields" disabled={blocked}>
           <div className="form-group">
             <label>Title</label>
             <input className="form-control" value={form.title} onChange={(e) => handleChange('title', e.target.value)} />
@@ -307,14 +317,16 @@ export default function TaskPanel({ task, defaultStatus, onClose, onUpdate, onCr
             <h3>Attachments</h3>
             <FileList
               files={files}
-              pending={pendingFiles}
-              onDelete={!isNew ? handleDeleteFile : undefined}
-              onRemovePending={(i) => setPendingFiles((prev) => prev.filter((_, idx) => idx !== i))}
+              pending={isNew ? pendingFiles : []}
+              onDelete={!isNew && !blocked ? handleDeleteFile : undefined}
+              onRemovePending={isNew && !blocked ? (i) => setPendingFiles((prev) => prev.filter((_, idx) => idx !== i)) : undefined}
             />
-            <label className="btn btn-secondary btn-sm file-upload-btn">
-              + Upload file
-              <input type="file" hidden multiple onChange={handleTaskFileSelect} />
-            </label>
+            {!blocked && (
+              <label className="btn btn-secondary btn-sm file-upload-btn">
+                + Upload file
+                <input type="file" hidden multiple onChange={handleTaskFileSelect} />
+              </label>
+            )}
           </div>
 
           <div className="form-group reminder-section">
@@ -355,8 +367,6 @@ export default function TaskPanel({ task, defaultStatus, onClose, onUpdate, onCr
                 Created by {task.created_by_name} on {new Date(task.created_at).toLocaleDateString()}
               </div>
 
-              <StatusTracker history={history} />
-
               <div className="comments-section">
                 <h3>Comments ({comments.length})</h3>
                 {comments.map((c) => (
@@ -372,27 +382,34 @@ export default function TaskPanel({ task, defaultStatus, onClose, onUpdate, onCr
                 <form className="comment-form" onSubmit={handleAddComment}>
                   <div className="comment-compose">
                     <input className="form-control" placeholder="Add a comment..." value={newComment} onChange={(e) => setNewComment(e.target.value)} />
-                    <FileList pending={pendingCommentFiles} onRemovePending={(i) => setPendingCommentFiles((prev) => prev.filter((_, idx) => idx !== i))} />
-                    <div className="comment-actions">
-                      <label className="btn btn-secondary btn-sm file-upload-btn">
-                        Attach file
-                        <input type="file" hidden multiple onChange={handleCommentFileSelect} />
-                      </label>
-                      <button className="btn btn-secondary btn-sm" type="submit">Post</button>
-                    </div>
+                    {!blocked && (
+                      <div className="comment-actions">
+                        {pendingCommentFiles.length > 0 && (
+                          <span className="file-meta">{pendingCommentFiles.length} file(s) selected</span>
+                        )}
+                        <label className="btn btn-secondary btn-sm file-upload-btn">
+                          Attach file
+                          <input type="file" hidden multiple onChange={handleCommentFileSelect} />
+                        </label>
+                        <button className="btn btn-secondary btn-sm" type="submit" disabled={!newComment.trim() && !pendingCommentFiles.length}>
+                          Post
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </form>
               </div>
             </>
           )}
+          </fieldset>
         </div>
 
         <div className="task-panel-footer">
           {!isNew && (
-            <button className="btn btn-danger" onClick={handleDelete} style={{ marginRight: 'auto' }}>Delete</button>
+            <button className="btn btn-danger" onClick={handleDelete} style={{ marginRight: 'auto' }} disabled={blocked}>Delete</button>
           )}
-          <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+          <button className="btn btn-secondary" onClick={onClose} disabled={blocked}>Cancel</button>
+          <button className="btn btn-primary" onClick={handleSave} disabled={blocked}>
             {saving ? 'Saving...' : isNew ? 'Create' : 'Save'}
           </button>
         </div>

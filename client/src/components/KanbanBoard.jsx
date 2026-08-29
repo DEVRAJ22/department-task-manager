@@ -33,11 +33,6 @@ function KanbanCard({ task, index, onClick }) {
         >
           <div className="kanban-card-top">
             <div className="kanban-card-title">{task.title}</div>
-            {task.unread_count > 0 && (
-              <span className="kanban-notify-badge" title="Unread comments">
-                💬 {task.unread_count}
-              </span>
-            )}
           </div>
           <div className="kanban-card-meta">
             <PriorityBadge priority={task.priority} />
@@ -129,7 +124,7 @@ export default function KanbanBoard() {
   const allowedDropStatuses = canComplete ? STATUSES : USER_MOVABLE_STATUSES;
 
   const loadTasks = useCallback(() => {
-    return api.getTasks().then(setTasks).catch(console.error);
+    return api.getTasks({ unread: '0' }).then(setTasks).catch(console.error);
   }, []);
 
   useEffect(() => {
@@ -204,14 +199,8 @@ export default function KanbanBoard() {
     }
   };
 
-  const handleOpenTask = async (task) => {
+  const handleOpenTask = (task) => {
     setSelectedTask(task);
-    try {
-      await api.markTaskViewed(task.id);
-      setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, unread_count: 0 } : t)));
-    } catch {
-      // non-critical
-    }
   };
 
   const handleTaskUpdate = (updated) => {

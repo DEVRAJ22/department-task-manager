@@ -23,13 +23,8 @@ router.get('/', authRequired, asyncHandler(async (req, res) => {
   if (!isAdmin(req.user)) filters.assignedUserId = req.user.id;
   if (req.query.status) filters.status = req.query.status;
 
-  const includeUnread = req.query.unread !== '0';
   const list = await tasks.getTasks(filters);
-  const result = includeUnread
-    ? await tasks.attachUnreadCounts(req.user.id, list)
-    : list.map((t) => formatTask({ ...t, unread_count: 0 }));
-
-  res.json(result);
+  res.json(list.map((t) => formatTask({ ...t, unread_count: 0 })));
 }));
 
 router.post('/:id/view', authRequired, asyncHandler(async (req, res) => {
