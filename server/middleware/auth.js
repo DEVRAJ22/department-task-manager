@@ -37,11 +37,10 @@ export const authRequired = asyncHandler(async (req, res, next) => {
 });
 
 function cookieOptions() {
-  const isProduction = process.env.NODE_ENV === 'production';
   return {
     httpOnly: true,
-    secure: isProduction,
-    sameSite: isProduction ? 'none' : 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
   };
 }
 

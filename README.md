@@ -51,11 +51,20 @@ On first run, demo data is seeded automatically (admin, users, tasks).
 | jane     | password |
 | bob      | password |
 
-## Production
+## Production (Vercel)
+
+1. Push to GitHub and import the repo in [Vercel](https://vercel.com)
+2. Set environment variables in the Vercel project:
+   - `SUPABASE_URL`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+   - `JWT_SECRET`
+   - `NODE_ENV` = `production`
+3. Deploy — Vercel serves the React app and `/api` routes from one domain
+
+Or deploy from CLI:
 
 ```bash
-npm run build
-npm start
+npx vercel --prod
 ```
 
 ## Tech Stack
