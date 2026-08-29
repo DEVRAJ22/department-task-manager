@@ -23,9 +23,11 @@ router.post('/login', asyncHandler(async (req, res) => {
   }
 
   const token = signToken(user);
+  const isProduction = process.env.NODE_ENV === 'production';
   res.cookie('token', token, {
     httpOnly: true,
-    sameSite: 'lax',
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax',
     maxAge: 8 * 60 * 60 * 1000,
   });
 
@@ -33,7 +35,12 @@ router.post('/login', asyncHandler(async (req, res) => {
 }));
 
 router.post('/logout', (_req, res) => {
-  res.clearCookie('token');
+  const isProduction = process.env.NODE_ENV === 'production';
+  res.clearCookie('token', {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax',
+  });
   res.json({ ok: true });
 });
 

@@ -14,17 +14,24 @@ import fileRoutes from './routes/files.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const HOST = process.env.HOST || '0.0.0.0';
 const PORT = process.env.PORT || 3001;
+const isProduction = process.env.NODE_ENV === 'production';
+const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
 
 await seedDatabase();
 
 const app = express();
+app.set('trust proxy', 1);
 
 app.use(cors({
-  origin: process.env.CLIENT_URL || true,
+  origin: isProduction ? clientUrl : true,
   credentials: true,
 }));
 app.use(express.json());
 app.use(cookieParser());
+
+app.get('/api/health', (_req, res) => {
+  res.json({ ok: true });
+});
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);

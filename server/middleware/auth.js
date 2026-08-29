@@ -24,17 +24,26 @@ export const authRequired = asyncHandler(async (req, res, next) => {
     const user = await users.getUserById(payload.id);
 
     if (!user || user.disabled) {
-      res.clearCookie('token');
+      res.clearCookie('token', cookieOptions());
       return res.status(401).json({ error: 'Invalid or disabled account' });
     }
 
     req.user = formatUser(user);
     next();
   } catch {
-    res.clearCookie('token');
+    res.clearCookie('token', cookieOptions());
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 });
+
+function cookieOptions() {
+  const isProduction = process.env.NODE_ENV === 'production';
+  return {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax',
+  };
+}
 
 export function adminRequired(req, res, next) {
   if (req.user?.role !== 'admin') {
