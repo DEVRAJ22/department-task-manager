@@ -16,7 +16,8 @@ export default function AllTasks() {
 
   const loadTasks = () => {
     setLoading(true);
-    const params = filter ? { status: filter } : {};
+    const params = { unread: '0' };
+    if (filter) params.status = filter;
     api.getTasks(params).then(setTasks).catch(console.error).finally(() => setLoading(false));
   };
 

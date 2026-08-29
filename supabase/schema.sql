@@ -83,6 +83,9 @@ CREATE TABLE IF NOT EXISTS task_views (
   PRIMARY KEY (user_id, task_id)
 );
 
+CREATE INDEX IF NOT EXISTS idx_comments_task ON comments(task_id);
+CREATE INDEX IF NOT EXISTS idx_task_views_user ON task_views(user_id);
+
 -- Storage bucket for file uploads (run once)
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('task-files', 'task-files', false)

@@ -15,7 +15,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.getTasks().then(setTasks).catch(console.error).finally(() => setLoading(false));
+    api.getTasks({ unread: '0' }).then(setTasks).catch(console.error).finally(() => setLoading(false));
   }, []);
 
   const myTasks = tasks;

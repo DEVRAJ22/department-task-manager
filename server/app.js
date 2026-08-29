@@ -12,7 +12,7 @@ import fileRoutes from './routes/files.js';
 const isProduction = process.env.NODE_ENV === 'production';
 const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
 
-await seedDatabase();
+seedDatabase().catch((err) => console.error('Seed error:', err));
 
 const app = express();
 app.set('trust proxy', 1);

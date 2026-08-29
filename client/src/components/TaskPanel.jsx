@@ -96,12 +96,19 @@ export default function TaskPanel({ task, defaultStatus, onClose, onUpdate, onCr
     }
 
     if (task) {
-      api.getComments(task.id).then(setComments).catch(console.error);
-      api.getTaskFiles(task.id).then(setFiles).catch(console.error);
-      api.getTaskHistory(task.id).then(setHistory).catch(console.error);
-      api.getTaskReminder(task.id).then((r) => {
-        if (r) setReminder({ ...r, days: JSON.parse(r.days || '[]'), active: !!r.active });
-      }).catch(() => {});
+      Promise.all([
+        api.getComments(task.id),
+        api.getTaskFiles(task.id),
+        api.getTaskHistory(task.id),
+        api.getTaskReminder(task.id),
+      ]).then(([commentsData, filesData, historyData, reminderData]) => {
+        setComments(commentsData);
+        setFiles(filesData);
+        setHistory(historyData);
+        if (reminderData) {
+          setReminder({ ...reminderData, days: JSON.parse(reminderData.days || '[]'), active: !!reminderData.active });
+        }
+      }).catch(console.error);
       api.markTaskViewed(task.id).catch(() => {});
     }
   }, [task, user, isAdmin, canAssign]);

@@ -28,13 +28,32 @@ export async function getTaskById(id) {
 }
 
 export async function getTasks({ assignedUserId, status } = {}) {
-  let q = supabase.from('tasks').select('*').order('status').order('position').order('id');
+  let q = supabase
+    .from('tasks')
+    .select('*, assigned_user:users!assigned_user_id(name), creator:users!created_by_id(name)')
+    .order('status')
+    .order('position')
+    .order('id');
   if (assignedUserId) q = q.eq('assigned_user_id', assignedUserId);
   if (status) q = q.eq('status', status);
 
   const { data, error } = await q;
-  if (error) throw error;
-  return attachUserNames(data || []);
+  if (error) {
+    let fallback = supabase.from('tasks').select('*').order('status').order('position').order('id');
+    if (assignedUserId) fallback = fallback.eq('assigned_user_id', assignedUserId);
+    if (status) fallback = fallback.eq('status', status);
+    const { data: rows, error: fallbackError } = await fallback;
+    if (fallbackError) throw fallbackError;
+    return attachUserNames(rows || []);
+  }
+
+  return (data || []).map((t) => ({
+    ...t,
+    assigned_user_name: t.assigned_user?.name || null,
+    created_by_name: t.creator?.name || null,
+    assigned_user: undefined,
+    creator: undefined,
+  }));
 }
 
 export async function createTask(fields) {
@@ -166,28 +185,36 @@ export async function markTaskViewed(userId, taskId) {
 }
 
 export async function attachUnreadCounts(userId, tasks) {
-  const results = [];
-  for (const t of tasks) {
-    const { data: view } = await supabase
+  if (!tasks.length) return [];
+
+  const taskIds = tasks.map((t) => t.id);
+
+  const [{ data: views }, { data: comments, error }] = await Promise.all([
+    supabase
       .from('task_views')
-      .select('last_viewed_at')
+      .select('task_id, last_viewed_at')
       .eq('user_id', userId)
-      .eq('task_id', t.id)
-      .maybeSingle();
-
-    const since = view?.last_viewed_at || '1970-01-01T00:00:00Z';
-
-    const { count, error } = await supabase
+      .in('task_id', taskIds),
+    supabase
       .from('comments')
-      .select('*', { count: 'exact', head: true })
-      .eq('task_id', t.id)
-      .neq('user_id', userId)
-      .gt('created_at', since);
+      .select('task_id, created_at')
+      .in('task_id', taskIds)
+      .neq('user_id', userId),
+  ]);
 
-    if (error) throw error;
-    results.push(formatTask({ ...t, unread_count: count || 0 }));
+  if (error) throw error;
+
+  const viewMap = Object.fromEntries((views || []).map((v) => [v.task_id, v.last_viewed_at]));
+  const counts = {};
+
+  for (const comment of comments || []) {
+    const since = viewMap[comment.task_id] || '1970-01-01T00:00:00Z';
+    if (comment.created_at > since) {
+      counts[comment.task_id] = (counts[comment.task_id] || 0) + 1;
+    }
   }
-  return results;
+
+  return tasks.map((t) => formatTask({ ...t, unread_count: counts[t.id] || 0 }));
 }
 
 export async function getActiveReminders() {

@@ -2,7 +2,6 @@ import { Router } from 'express';
 import { authRequired } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { canAccessTask, isAdmin } from '../utils/permissions.js';
-import { processReminders } from '../utils/reminders.js';
 import {
   formatTask,
   resolveCreateStatus,
@@ -17,15 +16,17 @@ import * as tasks from '../services/tasksService.js';
 const router = Router();
 
 router.get('/', authRequired, asyncHandler(async (req, res) => {
-  await processReminders();
-
   const filters = {};
   if (!isAdmin(req.user)) filters.assignedUserId = req.user.id;
   if (req.query.status) filters.status = req.query.status;
 
+  const includeUnread = req.query.unread !== '0';
   const list = await tasks.getTasks(filters);
-  const withUnread = await tasks.attachUnreadCounts(req.user.id, list);
-  res.json(withUnread);
+  const result = includeUnread
+    ? await tasks.attachUnreadCounts(req.user.id, list)
+    : list.map((t) => formatTask({ ...t, unread_count: 0 }));
+
+  res.json(result);
 }));
 
 router.post('/:id/view', authRequired, asyncHandler(async (req, res) => {

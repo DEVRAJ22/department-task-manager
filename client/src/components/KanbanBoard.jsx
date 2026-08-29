@@ -196,7 +196,6 @@ export default function KanbanBoard() {
 
     try {
       await api.moveTask(taskId, newStatus, newPosition);
-      await loadTasks();
     } catch (err) {
       setError(err.message);
       setTasks(previousTasks);

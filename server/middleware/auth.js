@@ -1,13 +1,22 @@
 import jwt from 'jsonwebtoken';
 import { formatUser } from '../utils/permissions.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import * as users from '../services/usersService.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'task-manager-dev-secret-change-in-production';
 
 export function signToken(user) {
   return jwt.sign(
-    { id: user.id, username: user.username, role: user.role },
+    {
+      id: user.id,
+      username: user.username,
+      role: user.role,
+      name: user.name,
+      employee_id: user.employee_id,
+      department: user.department,
+      disabled: !!user.disabled,
+      can_assign: !!user.can_assign,
+      can_verify: !!user.can_verify,
+    },
     JWT_SECRET,
     { expiresIn: '8h' }
   );
@@ -21,14 +30,12 @@ export const authRequired = asyncHandler(async (req, res, next) => {
 
   try {
     const payload = jwt.verify(token, JWT_SECRET);
-    const user = await users.getUserById(payload.id);
-
-    if (!user || user.disabled) {
+    if (payload.disabled) {
       res.clearCookie('token', cookieOptions());
       return res.status(401).json({ error: 'Invalid or disabled account' });
     }
 
-    req.user = formatUser(user);
+    req.user = formatUser(payload);
     next();
   } catch {
     res.clearCookie('token', cookieOptions());
