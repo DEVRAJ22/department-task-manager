@@ -34,6 +34,7 @@ export async function getCommentsByTask(taskId) {
     filesByComment[f.comment_id].push({
       ...f,
       uploader_name: uploaderMap[f.uploaded_by] || null,
+      share_url: f.share_token ? `/api/files/share/${f.share_token}` : null,
     });
   }
 

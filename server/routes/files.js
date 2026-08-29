@@ -14,6 +14,23 @@ const upload = multer({
 
 const router = Router();
 
+router.get('/share/:token', asyncHandler(async (req, res) => {
+  const file = await files.getFileByShareToken(req.params.token);
+  if (!file) return res.status(404).json({ error: 'File not found' });
+
+  const blob = await files.downloadFile(file.storage_path);
+  const buffer = Buffer.from(await blob.arrayBuffer());
+  const mime = file.mime_type || 'application/octet-stream';
+  const inline = mime.startsWith('image/') || mime === 'application/pdf';
+
+  res.setHeader('Content-Type', mime);
+  res.setHeader(
+    'Content-Disposition',
+    `${inline ? 'inline' : 'attachment'}; filename="${file.original_name}"`
+  );
+  res.send(buffer);
+}));
+
 router.get('/task/:taskId', authRequired, asyncHandler(async (req, res) => {
   const taskId = Number(req.params.taskId);
   const task = await tasks.getTaskById(taskId);

@@ -3,6 +3,7 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import './supabase.js';
 import { seedDatabase } from './seed.js';
+import { asyncHandler } from './utils/asyncHandler.js';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import taskRoutes from './routes/tasks.js';
@@ -27,6 +28,16 @@ app.use(cookieParser());
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true });
 });
+
+app.get('/api/cron/cleanup-completed', asyncHandler(async (req, res) => {
+  const secret = process.env.CRON_SECRET;
+  if (secret && req.headers.authorization !== `Bearer ${secret}`) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  const { purgeExpiredCompletedTasks } = await import('./utils/taskCleanup.js');
+  const deleted = await purgeExpiredCompletedTasks();
+  res.json({ deleted });
+}));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);

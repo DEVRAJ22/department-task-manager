@@ -26,11 +26,13 @@ CREATE TABLE IF NOT EXISTS tasks (
   status TEXT NOT NULL DEFAULT 'Backlog',
   position INTEGER NOT NULL DEFAULT 0,
   created_by_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  completed_at TIMESTAMPTZ
 );
 
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_assigned ON tasks(assigned_user_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_completed ON tasks(status, completed_at);
 
 -- Comments
 CREATE TABLE IF NOT EXISTS comments (
@@ -51,6 +53,7 @@ CREATE TABLE IF NOT EXISTS task_files (
   mime_type TEXT,
   size BIGINT,
   uploaded_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
+  share_token TEXT UNIQUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

@@ -12,10 +12,13 @@ import {
   STATUSES,
 } from '../utils/taskHelpers.js';
 import * as tasks from '../services/tasksService.js';
+import { purgeExpiredCompletedTasks } from '../utils/taskCleanup.js';
 
 const router = Router();
 
 router.get('/', authRequired, asyncHandler(async (req, res) => {
+  purgeExpiredCompletedTasks().catch((err) => console.error('Cleanup error:', err));
+
   const filters = {};
   if (!isAdmin(req.user)) filters.assignedUserId = req.user.id;
   if (req.query.status) filters.status = req.query.status;
@@ -137,6 +140,7 @@ router.put('/:id/move', authRequired, asyncHandler(async (req, res) => {
 
   if (statusChanged) {
     await tasks.logStatusChange(id, status, req.user.id);
+    await tasks.setCompletedAt(id, status);
   }
 
   const updated = await tasks.getTaskById(id);
@@ -163,6 +167,7 @@ router.put('/:id', authRequired, asyncHandler(async (req, res) => {
   if (due_date !== undefined) updates.due_date = due_date || null;
   updates.status = newStatus;
   updates.assigned_user_id = assigned_user_id !== undefined ? (assigned_user_id || req.user.id) : task.assigned_user_id;
+  updates.completed_at = newStatus === 'Completed' ? new Date().toISOString() : null;
 
   if (statusChanged) {
     const maxPos = await tasks.getMaxPosition(newStatus);

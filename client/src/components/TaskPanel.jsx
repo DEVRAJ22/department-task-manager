@@ -49,7 +49,13 @@ function FileList({ files, onDelete, pending, onRemovePending }) {
       ))}
       {files?.map((f) => (
         <div key={f.id} className="file-item">
-          <a href={api.downloadFile(f.id)} target="_blank" rel="noreferrer">{f.original_name}</a>
+          <a
+            href={f.share_token ? api.fileShareUrl(f.share_token) : api.downloadFile(f.id)}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {f.original_name}
+          </a>
           <span className="file-meta">{(f.size / 1024).toFixed(1)} KB</span>
           {onDelete && (
             <button type="button" className="btn btn-danger btn-sm" onClick={() => onDelete(f.id)}>×</button>

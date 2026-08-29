@@ -73,6 +73,7 @@ export const api = {
   getTaskFiles: (taskId) => request(`/files/task/${taskId}`),
   uploadTaskFile: (taskId, file) => uploadFile(`/files/task/${taskId}`, file),
   uploadCommentFile: (commentId, file) => uploadFile(`/files/comment/${commentId}`, file),
+  fileShareUrl: (shareToken) => `${API_BASE}/files/share/${shareToken}`,
   downloadFile: (fileId) => `${API_BASE}/files/${fileId}/download`,
   deleteFile: (fileId) => request(`/files/${fileId}`, { method: 'DELETE' }),
 };

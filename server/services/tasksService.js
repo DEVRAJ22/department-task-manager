@@ -71,7 +71,12 @@ export async function updateTask(id, fields) {
 }
 
 export async function deleteTask(id) {
-  const { error } = await supabase.from('tasks').delete().eq('id', id);
+  await deleteTaskFully(id);
+}
+
+export async function setCompletedAt(id, status) {
+  const completed_at = status === 'Completed' ? new Date().toISOString() : null;
+  const { error } = await supabase.from('tasks').update({ completed_at }).eq('id', id);
   if (error) throw error;
 }
 

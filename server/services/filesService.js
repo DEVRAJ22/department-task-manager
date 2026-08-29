@@ -1,5 +1,7 @@
 import { supabase } from '../supabase.js';
 import { STORAGE_BUCKET } from '../constants.js';
+import { randomUUID } from 'crypto';
+import { deleteTaskFully } from '../utils/taskCleanup.js';
 
 function formatFile(row) {
   return {
@@ -11,6 +13,8 @@ function formatFile(row) {
     size: row.size,
     uploaded_by: row.uploaded_by,
     uploader_name: row.uploader_name || row.uploader?.name || null,
+    share_token: row.share_token,
+    share_url: row.share_token ? `/api/files/share/${row.share_token}` : null,
     created_at: row.created_at,
   };
 }
@@ -32,6 +36,12 @@ export async function getTaskFiles(taskId) {
   }
 
   return (data || []).map((f) => formatFile({ ...f, uploader_name: uploaderMap[f.uploaded_by] }));
+}
+
+export async function getFileByShareToken(token) {
+  const { data, error } = await supabase.from('task_files').select('*').eq('share_token', token).single();
+  if (error && error.code !== 'PGRST116') throw error;
+  return data;
 }
 
 export async function getFileById(id) {
@@ -59,6 +69,7 @@ export async function uploadFile({ taskId, commentId, file, uploadedBy }) {
       mime_type: file.mimetype,
       size: file.size,
       uploaded_by: uploadedBy,
+      share_token: randomUUID(),
     })
     .select('*')
     .single();
