@@ -18,16 +18,13 @@ export default function Dashboard() {
     api.getTasks({ unread: '0' }).then(setTasks).catch(console.error).finally(() => setLoading(false));
   }, []);
 
-  const myTasks = tasks;
-  const inProgress = myTasks.filter((t) => t.status === 'In Progress');
-  const completed = myTasks.filter((t) => t.status === 'Completed');
-  const overdue = myTasks.filter(
-    (t) => t.due_date && new Date(t.due_date) < new Date() && t.status !== 'Completed'
-  );
+  const myTasks = tasks.filter((t) => t.assigned_user_id === user.id);
+  const backlogCount = myTasks.filter((t) => t.status === 'Backlog').length;
+  const todoCount = myTasks.filter((t) => t.status === 'To Do').length;
 
-  const recentTasks = [...tasks]
-    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-    .slice(0, 5);
+  const pendingTasks = myTasks
+    .filter((t) => t.status === 'Backlog' || t.status === 'To Do')
+    .sort((a, b) => new Date(a.due_date || '9999') - new Date(b.due_date || '9999'));
 
   const handleTaskUpdate = (updated) => {
     setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
@@ -50,45 +47,39 @@ export default function Dashboard() {
 
       <div className="stats-grid">
         <div className="card stat-card">
-          <div className="stat-value">{myTasks.length}</div>
-          <div className="stat-label">My Tasks</div>
+          <div className="stat-value">{backlogCount}</div>
+          <div className="stat-label">Backlog</div>
         </div>
         <div className="card stat-card">
-          <div className="stat-value">{inProgress.length}</div>
-          <div className="stat-label">In Progress</div>
+          <div className="stat-value">{todoCount}</div>
+          <div className="stat-label">To Do</div>
         </div>
         <div className="card stat-card">
-          <div className="stat-value">{completed.length}</div>
-          <div className="stat-label">Completed</div>
-        </div>
-        <div className="card stat-card">
-          <div className="stat-value">{overdue.length}</div>
-          <div className="stat-label">Overdue</div>
+          <div className="stat-value">{backlogCount + todoCount}</div>
+          <div className="stat-label">Total Pending</div>
         </div>
       </div>
 
       <div className="card">
         <div className="card-body">
-          <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>Recent Tasks</h2>
-          {recentTasks.length === 0 ? (
-            <div className="empty-state">No tasks yet</div>
+          <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>Pending Tasks</h2>
+          {pendingTasks.length === 0 ? (
+            <div className="empty-state">No pending tasks</div>
           ) : (
             <div className="table-wrap">
               <table>
                 <thead>
                   <tr>
                     <th>Title</th>
-                    <th>Assigned To</th>
                     <th>Priority</th>
                     <th>Status</th>
                     <th>Due Date</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {recentTasks.map((task) => (
+                  {pendingTasks.map((task) => (
                     <tr key={task.id} onClick={() => setSelectedTask(task)} style={{ cursor: 'pointer' }}>
                       <td>{task.title}</td>
-                      <td>{task.assigned_user_name || '—'}</td>
                       <td><PriorityBadge priority={task.priority} /></td>
                       <td><span className="badge badge-status">{task.status}</span></td>
                       <td>{task.due_date || '—'}</td>

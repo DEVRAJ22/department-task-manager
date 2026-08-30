@@ -65,6 +65,7 @@ export const api = {
     request(`/tasks/${id}/move`, { method: 'PUT', body: JSON.stringify({ status, position }) }),
   deleteTask: (id) => request(`/tasks/${id}`, { method: 'DELETE' }),
   markTaskViewed: (id) => request(`/tasks/${id}/view`, { method: 'POST' }),
+  importTasks: (tasks) => request('/tasks/bulk', { method: 'POST', body: JSON.stringify({ tasks }) }),
 
   getComments: (taskId) => request(`/comments/task/${taskId}`),
   addComment: (taskId, content) =>

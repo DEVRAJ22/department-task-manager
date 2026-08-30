@@ -3,6 +3,8 @@ import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { api, STATUSES, CREATE_STATUSES, USER_MOVABLE_STATUSES } from '../api';
 import { useAuth } from '../context/AuthContext';
 import TaskPanel from './TaskPanel';
+import { prioritySort, priorityBorderClass } from '../utils/priority';
+import { IconSort } from './Icons';
 
 function todayStr() {
   return new Date().toISOString().split('T')[0];
@@ -28,7 +30,7 @@ function KanbanCard({ task, index, onClick }) {
           ref={provided.innerRef}
           {...provided.draggableProps}
           {...provided.dragHandleProps}
-          className={`kanban-card${snapshot.isDragging ? ' dragging' : ''}`}
+          className={`kanban-card ${priorityBorderClass(task.priority)}${snapshot.isDragging ? ' dragging' : ''}`}
           onClick={() => onClick(task)}
         >
           <div className="kanban-card-top">
@@ -119,6 +121,7 @@ export default function KanbanBoard() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [prioritySortEnabled, setPrioritySortEnabled] = useState(false);
 
   const canComplete = isAdmin || canVerify;
   const allowedDropStatuses = canComplete ? STATUSES : USER_MOVABLE_STATUSES;
@@ -132,14 +135,17 @@ export default function KanbanBoard() {
   }, [loadTasks]);
 
   const getColumnTasks = (status) => {
-    let columnTasks = tasks
-      .filter((t) => t.status === status)
-      .sort((a, b) => a.position - b.position || a.id - b.id);
+    let columnTasks = tasks.filter((t) => t.status === status);
 
     const filterId = columnFilters[status];
     if (filterId) {
       columnTasks = columnTasks.filter((t) => String(t.assigned_user_id) === filterId);
     }
+
+    columnTasks = prioritySortEnabled
+      ? [...columnTasks].sort(prioritySort)
+      : columnTasks.sort((a, b) => a.position - b.position || a.id - b.id);
+
     return columnTasks;
   };
 
@@ -223,12 +229,23 @@ export default function KanbanBoard() {
 
   return (
     <>
-      <div className="page-header">
-        <h1>Kanban Board</h1>
-        <p>
-          Your assigned tasks — drag between columns{saving ? ' (saving…)' : ''}
-          {!canComplete && ' (Completed: admin/manager only)'}
-        </p>
+      <div className="page-header page-header-row">
+        <div>
+          <h1>Kanban Board</h1>
+          <p>
+            Your assigned tasks — drag between columns{saving ? ' (saving…)' : ''}
+            {!canComplete && ' (Completed: admin/manager only)'}
+          </p>
+        </div>
+        <button
+          type="button"
+          className={`btn btn-secondary btn-sm sort-priority-btn${prioritySortEnabled ? ' active' : ''}`}
+          onClick={() => setPrioritySortEnabled((v) => !v)}
+          title="Sort by priority: High → Low → Daily Task"
+        >
+          <IconSort />
+          {prioritySortEnabled ? 'Position order' : 'Priority order'}
+        </button>
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}

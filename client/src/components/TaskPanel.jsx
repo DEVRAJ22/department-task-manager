@@ -48,6 +48,7 @@ export default function TaskPanel({ task, defaultStatus, onClose, onUpdate, onCr
     priority: task?.priority || 'Medium',
     due_date: task?.due_date || todayStr(),
     status: task?.status || defaultStatus || 'Backlog',
+    file_location: task?.file_location || '',
   });
   const [users, setUsers] = useState([]);
   const [comments, setComments] = useState([]);
@@ -311,6 +312,18 @@ export default function TaskPanel({ task, defaultStatus, onClose, onUpdate, onCr
               <label>Due Date</label>
               <input className="form-control" type="date" value={form.due_date} onChange={(e) => handleChange('due_date', e.target.value)} />
             </div>
+          </div>
+
+          <div className="form-group">
+            <label>File Location</label>
+            <input
+              className="form-control"
+              type="text"
+              placeholder="URL or local path (e.g. C:\Projects\file.docx)"
+              value={form.file_location}
+              onChange={(e) => handleChange('file_location', e.target.value)}
+            />
+            <p className="form-hint">Optional link or path to a related file</p>
           </div>
 
           <div className="files-section">

@@ -23,6 +23,8 @@ export function formatTask(row) {
     created_by_id: row.created_by_id,
     created_by_name: row.created_by_name,
     created_at: row.created_at,
+    completed_at: row.completed_at,
+    file_location: row.file_location || '',
     unread_count: row.unread_count ?? 0,
   };
 }

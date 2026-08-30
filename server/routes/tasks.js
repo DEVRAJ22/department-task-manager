@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authRequired } from '../middleware/auth.js';
+import { authRequired, adminRequired } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { canAccessTask, isAdmin } from '../utils/permissions.js';
 import {
@@ -12,6 +12,7 @@ import {
   STATUSES,
 } from '../utils/taskHelpers.js';
 import * as tasks from '../services/tasksService.js';
+import * as users from '../services/usersService.js';
 import { purgeExpiredCompletedTasks } from '../utils/taskCleanup.js';
 
 const router = Router();
@@ -25,6 +26,57 @@ router.get('/', authRequired, asyncHandler(async (req, res) => {
 
   const list = await tasks.getTasks(filters);
   res.json(list.map((t) => formatTask({ ...t, unread_count: 0 })));
+}));
+
+router.post('/bulk', authRequired, adminRequired, asyncHandler(async (req, res) => {
+  const rows = req.body.tasks;
+  if (!Array.isArray(rows) || !rows.length) {
+    return res.status(400).json({ error: 'No tasks provided' });
+  }
+
+  const results = { created: 0, errors: [] };
+
+  for (const row of rows) {
+    try {
+      if (!row.title?.trim()) {
+        results.errors.push(`Row ${row._row || '?'}: Title is required`);
+        continue;
+      }
+
+      let assigneeId = req.user.id;
+      if (row.assigned_username) {
+        const assignee = await users.getUserByUsername(row.assigned_username.trim());
+        if (!assignee) {
+          results.errors.push(`Row ${row._row || '?'}: User "${row.assigned_username}" not found`);
+          continue;
+        }
+        assigneeId = assignee.id;
+      }
+
+      const taskStatus = STATUSES.includes(row.status) ? row.status : 'Backlog';
+      const taskPriority = PRIORITIES.includes(row.priority) ? row.priority : 'Medium';
+      const maxPos = await tasks.getMaxPosition(taskStatus);
+
+      const created = await tasks.createTask({
+        title: row.title.trim(),
+        description: row.description?.trim() || '',
+        assigned_user_id: assigneeId,
+        priority: taskPriority,
+        due_date: row.due_date || new Date().toISOString().split('T')[0],
+        status: taskStatus,
+        position: maxPos + 1,
+        created_by_id: req.user.id,
+        file_location: row.file_location?.trim() || '',
+      });
+
+      await tasks.logStatusChange(created.id, taskStatus, req.user.id, 'Imported from spreadsheet');
+      results.created++;
+    } catch (err) {
+      results.errors.push(`Row ${row._row || '?'}: ${err.message}`);
+    }
+  }
+
+  res.json(results);
 }));
 
 router.post('/:id/view', authRequired, asyncHandler(async (req, res) => {
@@ -83,7 +135,7 @@ router.get('/:id', authRequired, asyncHandler(async (req, res) => {
 }));
 
 router.post('/', authRequired, asyncHandler(async (req, res) => {
-  const { title, description, assigned_user_id, priority, due_date, status } = req.body;
+  const { title, description, assigned_user_id, priority, due_date, status, file_location } = req.body;
 
   if (!title?.trim()) {
     return res.status(400).json({ error: 'Title is required' });
@@ -108,6 +160,7 @@ router.post('/', authRequired, asyncHandler(async (req, res) => {
     status: taskStatus,
     position: maxPos + 1,
     created_by_id: req.user.id,
+    file_location: file_location?.trim() || '',
   });
 
   await tasks.logStatusChange(created.id, taskStatus, req.user.id, 'Task created');
@@ -147,7 +200,7 @@ router.put('/:id', authRequired, asyncHandler(async (req, res) => {
   const task = await tasks.getTaskById(id);
   if (!task) return res.status(404).json({ error: 'Task not found' });
 
-  const { title, description, assigned_user_id, priority, due_date, status } = req.body;
+  const { title, description, assigned_user_id, priority, due_date, status, file_location } = req.body;
   const newStatus = STATUSES.includes(status) ? status : task.status;
 
   const updateError = validateTaskUpdate(req.user, task, { assigned_user_id, status: newStatus });
@@ -160,6 +213,7 @@ router.put('/:id', authRequired, asyncHandler(async (req, res) => {
   if (description !== undefined) updates.description = description;
   if (priority && PRIORITIES.includes(priority)) updates.priority = priority;
   if (due_date !== undefined) updates.due_date = due_date || null;
+  if (file_location !== undefined) updates.file_location = file_location?.trim() || '';
   updates.status = newStatus;
   updates.assigned_user_id = assigned_user_id !== undefined ? (assigned_user_id || req.user.id) : task.assigned_user_id;
   updates.completed_at = newStatus === 'Completed' ? new Date().toISOString() : null;

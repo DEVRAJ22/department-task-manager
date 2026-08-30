@@ -1,13 +1,16 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import {
+  IconDashboard, IconTasks, IconKanban, IconList, IconUsers, IconProfile, IconLogout,
+} from './Icons';
 
 const navItems = [
-  { to: '/', label: 'Dashboard', end: true },
-  { to: '/my-tasks', label: 'My Tasks' },
-  { to: '/kanban', label: 'Kanban Board' },
-  { to: '/all-tasks', label: 'All Tasks', adminOnly: true },
-  { to: '/users', label: 'Users', adminOnly: true },
-  { to: '/profile', label: 'Profile' },
+  { to: '/', label: 'Dashboard', end: true, Icon: IconDashboard },
+  { to: '/my-tasks', label: 'My Tasks', Icon: IconTasks },
+  { to: '/kanban', label: 'Kanban Board', Icon: IconKanban },
+  { to: '/all-tasks', label: 'All Tasks', adminOnly: true, Icon: IconList },
+  { to: '/users', label: 'Users', adminOnly: true, Icon: IconUsers },
+  { to: '/profile', label: 'Profile', Icon: IconProfile },
 ];
 
 export default function Sidebar() {
@@ -25,23 +28,26 @@ export default function Sidebar() {
       <nav className="sidebar-nav">
         {navItems
           .filter((item) => !item.adminOnly || isAdmin)
-          .map((item) => (
+          .map(({ to, label, end, Icon }) => (
             <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
+              key={to}
+              to={to}
+              end={end}
               className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}
             >
-              {item.label}
+              <Icon />
+              {label}
             </NavLink>
           ))}
       </nav>
       <div className="sidebar-footer">
         <div className="sidebar-link" style={{ cursor: 'default', fontSize: 13 }}>
+          <IconProfile />
           {user?.name}
           {user?.can_verify && !isAdmin && <span className="badge" style={{ marginLeft: 6, fontSize: 10 }}>Manager</span>}
         </div>
         <button className="sidebar-link" onClick={handleLogout} style={{ width: '100%', border: 'none', background: 'none', textAlign: 'left' }}>
+          <IconLogout />
           Logout
         </button>
       </div>

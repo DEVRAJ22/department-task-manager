@@ -1,10 +1,25 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { api, STATUSES } from '../api';
 import TaskPanel from './TaskPanel';
+import { exportTasksToCsv, downloadTaskTemplate, parseTaskCsv } from '../utils/excel';
+import { IconDownload, IconUpload, IconLink } from './Icons';
 
 function PriorityBadge({ priority }) {
   const slug = priority.toLowerCase().replace(/\s+/g, '-');
   return <span className={`badge badge-priority-${slug}`}>{priority}</span>;
+}
+
+function FileLinkCell({ location }) {
+  if (!location) return '—';
+  const isUrl = /^https?:\/\//i.test(location);
+  if (isUrl) {
+    return (
+      <a href={location} target="_blank" rel="noreferrer" className="table-link" onClick={(e) => e.stopPropagation()}>
+        <IconLink /> Open
+      </a>
+    );
+  }
+  return <span className="file-location-text">{location}</span>;
 }
 
 export default function AllTasks() {
@@ -13,6 +28,9 @@ export default function AllTasks() {
   const [showCreate, setShowCreate] = useState(false);
   const [filter, setFilter] = useState('');
   const [loading, setLoading] = useState(true);
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState('');
+  const fileInputRef = useRef(null);
 
   const loadTasks = () => {
     setLoading(true);
@@ -39,6 +57,26 @@ export default function AllTasks() {
     setSelectedTask(created);
   };
 
+  const handleImport = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setImporting(true);
+    setImportMsg('');
+    try {
+      const text = await file.text();
+      const rows = parseTaskCsv(text);
+      const result = await api.importTasks(rows);
+      setImportMsg(`Imported ${result.created} task(s).${result.errors?.length ? ` ${result.errors.length} error(s).` : ''}`);
+      if (result.errors?.length) console.warn(result.errors);
+      loadTasks();
+    } catch (err) {
+      setImportMsg(err.message);
+    } finally {
+      setImporting(false);
+    }
+  };
+
   if (loading) return <div className="loading-screen">Loading...</div>;
 
   return (
@@ -56,9 +94,21 @@ export default function AllTasks() {
               <option key={s} value={s}>{s}</option>
             ))}
           </select>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => exportTasksToCsv(tasks)}>
+            <IconDownload /> Export Excel
+          </button>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={downloadTaskTemplate}>
+            <IconDownload /> Sample Template
+          </button>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => fileInputRef.current?.click()} disabled={importing}>
+            <IconUpload /> {importing ? 'Importing...' : 'Import Excel'}
+          </button>
+          <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls" hidden onChange={handleImport} />
         </div>
         <button className="btn btn-primary" onClick={() => setShowCreate(true)}>+ New Task</button>
       </div>
+
+      {importMsg && <div className="alert alert-info">{importMsg}</div>}
 
       <div className="card">
         <div className="card-body" style={{ padding: 0 }}>
@@ -70,22 +120,24 @@ export default function AllTasks() {
                 <thead>
                   <tr>
                     <th>Title</th>
+                    <th>Assigned From</th>
                     <th>Assigned To</th>
                     <th>Priority</th>
                     <th>Status</th>
                     <th>Due Date</th>
-                    <th>Created By</th>
+                    <th>File Link</th>
                   </tr>
                 </thead>
                 <tbody>
                   {tasks.map((task) => (
                     <tr key={task.id} onClick={() => setSelectedTask(task)} style={{ cursor: 'pointer' }}>
                       <td>{task.title}</td>
+                      <td>{task.created_by_name || '—'}</td>
                       <td>{task.assigned_user_name || '—'}</td>
                       <td><PriorityBadge priority={task.priority} /></td>
                       <td><span className="badge badge-status">{task.status}</span></td>
                       <td>{task.due_date || '—'}</td>
-                      <td>{task.created_by_name || '—'}</td>
+                      <td onClick={(e) => e.stopPropagation()}><FileLinkCell location={task.file_location} /></td>
                     </tr>
                   ))}
                 </tbody>

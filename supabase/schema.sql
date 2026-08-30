@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   due_date DATE,
   status TEXT NOT NULL DEFAULT 'Backlog',
   position INTEGER NOT NULL DEFAULT 0,
+  file_location TEXT DEFAULT '',
   created_by_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   completed_at TIMESTAMPTZ
