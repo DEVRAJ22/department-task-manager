@@ -45,6 +45,9 @@ export default function TaskPanel({ task, defaultStatus, onClose, onUpdate, onCr
     title: task?.title || '',
     description: task?.description || '',
     assigned_user_id: task?.assigned_user_id || user?.id || '',
+    assignee_ids: task?.assignee_ids?.length
+      ? task.assignee_ids.map(String)
+      : [String(task?.assigned_user_id || user?.id || '')],
     priority: task?.priority || 'Medium',
     due_date: task?.due_date || todayStr(),
     status: task?.status || defaultStatus || 'Backlog',
@@ -96,6 +99,21 @@ export default function TaskPanel({ task, defaultStatus, onClose, onUpdate, onCr
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
+  const toggleAssignee = (userId) => {
+    const id = String(userId);
+    setForm((prev) => {
+      const ids = prev.assignee_ids.includes(id)
+        ? prev.assignee_ids.filter((x) => x !== id)
+        : [...prev.assignee_ids, id];
+      if (!ids.length) return prev;
+      return {
+        ...prev,
+        assignee_ids: ids,
+        assigned_user_id: Number(ids[0]),
+      };
+    });
+  };
+
   const uploadPendingFiles = async (taskId, fileList) => {
     const uploaded = [];
     for (let i = 0; i < fileList.length; i++) {
@@ -116,7 +134,8 @@ export default function TaskPanel({ task, defaultStatus, onClose, onUpdate, onCr
     try {
       const data = {
         ...form,
-        assigned_user_id: form.assigned_user_id ? Number(form.assigned_user_id) : user.id,
+        assignee_ids: form.assignee_ids.map(Number),
+        assigned_user_id: form.assignee_ids.length ? Number(form.assignee_ids[0]) : user.id,
       };
 
       if (isNew) {
@@ -270,20 +289,26 @@ export default function TaskPanel({ task, defaultStatus, onClose, onUpdate, onCr
             <textarea className="form-control" value={form.description} onChange={(e) => handleChange('description', e.target.value)} rows={4} />
           </div>
 
-          <div className="form-row">
-            <div className="form-group">
-              <label>Assigned To</label>
-              <select
-                className="form-control"
-                value={form.assigned_user_id}
-                onChange={(e) => handleChange('assigned_user_id', e.target.value)}
-                disabled={!isAdmin && !canAssign}
-              >
-                {users.map((u) => (
-                  <option key={u.id} value={u.id}>{u.name}</option>
-                ))}
-              </select>
+          <div className="form-group">
+            <label>Assigned To {form.assignee_ids.length > 1 ? `(${form.assignee_ids.length} co-assignees)` : ''}</label>
+            <div className="assignee-picker">
+              {users.map((u) => (
+                <label key={u.id} className={`assignee-chip${form.assignee_ids.includes(String(u.id)) ? ' selected' : ''}`}>
+                  <input
+                    type="checkbox"
+                    checked={form.assignee_ids.includes(String(u.id))}
+                    onChange={() => toggleAssignee(u.id)}
+                    disabled={!isAdmin && !canAssign && u.id !== user.id}
+                    hidden
+                  />
+                  {u.name}
+                </label>
+              ))}
             </div>
+            <p className="form-hint">Select one or more users. Card moves sync for all assignees.</p>
+          </div>
+
+          <div className="form-row">
             <div className="form-group">
               <label>Priority</label>
               <select className="form-control" value={form.priority} onChange={(e) => handleChange('priority', e.target.value)}>
@@ -291,6 +316,10 @@ export default function TaskPanel({ task, defaultStatus, onClose, onUpdate, onCr
                   <option key={p} value={p}>{p}</option>
                 ))}
               </select>
+            </div>
+            <div className="form-group">
+              <label>Due Date</label>
+              <input className="form-control" type="date" value={form.due_date} onChange={(e) => handleChange('due_date', e.target.value)} />
             </div>
           </div>
 
@@ -307,10 +336,6 @@ export default function TaskPanel({ task, defaultStatus, onClose, onUpdate, onCr
                   <option key={s} value={s}>{s}</option>
                 ))}
               </select>
-            </div>
-            <div className="form-group">
-              <label>Due Date</label>
-              <input className="form-control" type="date" value={form.due_date} onChange={(e) => handleChange('due_date', e.target.value)} />
             </div>
           </div>
 

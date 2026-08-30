@@ -1,5 +1,6 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import UserAvatar from './UserAvatar';
 import {
   IconDashboard, IconTasks, IconKanban, IconList, IconUsers, IconProfile, IconLogout,
 } from './Icons';
@@ -42,7 +43,7 @@ export default function Sidebar() {
       </nav>
       <div className="sidebar-footer">
         <div className="sidebar-link" style={{ cursor: 'default', fontSize: 13 }}>
-          <IconProfile />
+          <UserAvatar user={user} size={24} />
           {user?.name}
           {user?.can_verify && !isAdmin && <span className="badge" style={{ marginLeft: 6, fontSize: 10 }}>Manager</span>}
         </div>

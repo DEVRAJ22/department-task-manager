@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS users (
   disabled BOOLEAN NOT NULL DEFAULT false,
   can_assign BOOLEAN NOT NULL DEFAULT false,
   can_verify BOOLEAN NOT NULL DEFAULT false,
+  avatar_id INTEGER NOT NULL DEFAULT 1,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -34,6 +35,14 @@ CREATE TABLE IF NOT EXISTS tasks (
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_assigned ON tasks(assigned_user_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_completed ON tasks(status, completed_at);
+
+CREATE TABLE IF NOT EXISTS task_assignees (
+  task_id BIGINT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  PRIMARY KEY (task_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_assignees_user ON task_assignees(user_id);
 
 -- Comments
 CREATE TABLE IF NOT EXISTS comments (

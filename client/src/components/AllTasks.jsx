@@ -1,8 +1,18 @@
-import { useState, useEffect, useRef } from 'react';
-import { api, STATUSES } from '../api';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { api, STATUSES, PRIORITIES } from '../api';
 import TaskPanel from './TaskPanel';
 import { exportTasksToCsv, downloadTaskTemplate, parseTaskCsv } from '../utils/excel';
 import { IconDownload, IconUpload, IconLink } from './Icons';
+
+const EMPTY_FILTERS = {
+  title: '',
+  created_by: '',
+  assigned_to: '',
+  priority: '',
+  status: '',
+  due_date: '',
+  file_location: '',
+};
 
 function PriorityBadge({ priority }) {
   const slug = priority.toLowerCase().replace(/\s+/g, '-');
@@ -22,11 +32,16 @@ function FileLinkCell({ location }) {
   return <span className="file-location-text">{location}</span>;
 }
 
+function matchFilter(value, filter) {
+  if (!filter) return true;
+  return String(value || '').toLowerCase().includes(filter.toLowerCase());
+}
+
 export default function AllTasks() {
   const [tasks, setTasks] = useState([]);
   const [selectedTask, setSelectedTask] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [filter, setFilter] = useState('');
+  const [colFilters, setColFilters] = useState(EMPTY_FILTERS);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState('');
@@ -34,12 +49,23 @@ export default function AllTasks() {
 
   const loadTasks = () => {
     setLoading(true);
-    const params = { unread: '0' };
-    if (filter) params.status = filter;
-    api.getTasks(params).then(setTasks).catch(console.error).finally(() => setLoading(false));
+    api.getTasks({ unread: '0' }).then(setTasks).catch(console.error).finally(() => setLoading(false));
   };
 
-  useEffect(() => { loadTasks(); }, [filter]);
+  useEffect(() => { loadTasks(); }, []);
+
+  const filteredTasks = useMemo(() => tasks.filter((task) => {
+    const assigneeNames = (task.assignees || []).map((a) => a.name).join(' ') || task.assigned_user_name || '';
+    return matchFilter(task.title, colFilters.title)
+      && matchFilter(task.created_by_name, colFilters.created_by)
+      && matchFilter(assigneeNames, colFilters.assigned_to)
+      && matchFilter(task.priority, colFilters.priority)
+      && matchFilter(task.status, colFilters.status)
+      && matchFilter(task.due_date, colFilters.due_date)
+      && matchFilter(task.file_location, colFilters.file_location);
+  }), [tasks, colFilters]);
+
+  const setFilter = (key, value) => setColFilters((prev) => ({ ...prev, [key]: value }));
 
   const handleTaskUpdate = (updated) => {
     setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
@@ -77,6 +103,8 @@ export default function AllTasks() {
     }
   };
 
+  const hasFilters = Object.values(colFilters).some(Boolean);
+
   if (loading) return <div className="loading-screen">Loading...</div>;
 
   return (
@@ -88,13 +116,7 @@ export default function AllTasks() {
 
       <div className="toolbar">
         <div className="toolbar-actions">
-          <select className="form-control" style={{ width: 'auto' }} value={filter} onChange={(e) => setFilter(e.target.value)}>
-            <option value="">All Statuses</option>
-            {STATUSES.map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
-          <button type="button" className="btn btn-secondary btn-sm" onClick={() => exportTasksToCsv(tasks)}>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => exportTasksToCsv(filteredTasks)}>
             <IconDownload /> Export Excel
           </button>
           <button type="button" className="btn btn-secondary btn-sm" onClick={downloadTaskTemplate}>
@@ -104,6 +126,11 @@ export default function AllTasks() {
             <IconUpload /> {importing ? 'Importing...' : 'Import Excel'}
           </button>
           <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls" hidden onChange={handleImport} />
+          {hasFilters && (
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setColFilters(EMPTY_FILTERS)}>
+              Clear filters
+            </button>
+          )}
         </div>
         <button className="btn btn-primary" onClick={() => setShowCreate(true)}>+ New Task</button>
       </div>
@@ -116,7 +143,7 @@ export default function AllTasks() {
             <div className="empty-state">No tasks found</div>
           ) : (
             <div className="table-wrap">
-              <table>
+              <table className="filterable-table">
                 <thead>
                   <tr>
                     <th>Title</th>
@@ -127,13 +154,34 @@ export default function AllTasks() {
                     <th>Due Date</th>
                     <th>File Link</th>
                   </tr>
+                  <tr className="filter-row">
+                    <th><input className="table-filter" placeholder="Filter..." value={colFilters.title} onChange={(e) => setFilter('title', e.target.value)} /></th>
+                    <th><input className="table-filter" placeholder="Filter..." value={colFilters.created_by} onChange={(e) => setFilter('created_by', e.target.value)} /></th>
+                    <th><input className="table-filter" placeholder="Filter..." value={colFilters.assigned_to} onChange={(e) => setFilter('assigned_to', e.target.value)} /></th>
+                    <th>
+                      <select className="table-filter" value={colFilters.priority} onChange={(e) => setFilter('priority', e.target.value)}>
+                        <option value="">All</option>
+                        {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
+                      </select>
+                    </th>
+                    <th>
+                      <select className="table-filter" value={colFilters.status} onChange={(e) => setFilter('status', e.target.value)}>
+                        <option value="">All</option>
+                        {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </th>
+                    <th><input className="table-filter" type="date" value={colFilters.due_date} onChange={(e) => setFilter('due_date', e.target.value)} /></th>
+                    <th><input className="table-filter" placeholder="Filter..." value={colFilters.file_location} onChange={(e) => setFilter('file_location', e.target.value)} /></th>
+                  </tr>
                 </thead>
                 <tbody>
-                  {tasks.map((task) => (
-                    <tr key={task.id} onClick={() => setSelectedTask(task)} style={{ cursor: 'pointer' }}>
+                  {filteredTasks.length === 0 ? (
+                    <tr><td colSpan={7} className="empty-state">No tasks match filters</td></tr>
+                  ) : filteredTasks.map((task) => (
+                    <tr key={task.id} onClick={() => setSelectedTask(task)} className="clickable-row">
                       <td>{task.title}</td>
                       <td>{task.created_by_name || '—'}</td>
-                      <td>{task.assigned_user_name || '—'}</td>
+                      <td>{(task.assignees || []).map((a) => a.name).join(', ') || task.assigned_user_name || '—'}</td>
                       <td><PriorityBadge priority={task.priority} /></td>
                       <td><span className="badge badge-status">{task.status}</span></td>
                       <td>{task.due_date || '—'}</td>

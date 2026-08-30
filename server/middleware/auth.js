@@ -16,6 +16,7 @@ export function signToken(user) {
       disabled: !!user.disabled,
       can_assign: !!user.can_assign,
       can_verify: !!user.can_verify,
+      avatar_id: user.avatar_id ?? 1,
     },
     JWT_SECRET,
     { expiresIn: '8h' }

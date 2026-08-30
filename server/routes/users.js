@@ -61,6 +61,16 @@ router.put('/profile/password', authRequired, asyncHandler(async (req, res) => {
   res.json({ ok: true });
 }));
 
+router.put('/profile/avatar', authRequired, asyncHandler(async (req, res) => {
+  const { avatar_id } = req.body;
+  const aid = Number(avatar_id);
+  if (!aid || aid < 1 || aid > 10) {
+    return res.status(400).json({ error: 'Avatar must be between 1 and 10' });
+  }
+  const updated = await users.updateUser(req.user.id, { avatar_id: aid });
+  res.json(updated);
+}));
+
 router.put('/:id', authRequired, adminRequired, asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   const { username, name, employee_id, department, role, disabled, can_assign, can_verify } = req.body;
@@ -117,6 +127,7 @@ router.post('/:id/reset-password', authRequired, adminRequired, asyncHandler(asy
 
 router.delete('/:id', authRequired, adminRequired, asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
+  const permanent = req.query.permanent === 'true';
 
   if (id === req.user.id) {
     return res.status(400).json({ error: 'Cannot delete your own account' });
@@ -125,8 +136,13 @@ router.delete('/:id', authRequired, adminRequired, asyncHandler(async (req, res)
   const user = await users.getUserById(id);
   if (!user) return res.status(404).json({ error: 'User not found' });
 
-  await users.disableUser(id);
-  res.json({ ok: true });
+  if (permanent) {
+    await users.hardDeleteUser(id);
+    res.json({ ok: true, permanent: true });
+  } else {
+    await users.disableUser(id);
+    res.json({ ok: true, permanent: false });
+  }
 }));
 
 export default router;

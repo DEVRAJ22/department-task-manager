@@ -13,9 +13,17 @@ import {
 } from '../utils/taskHelpers.js';
 import * as tasks from '../services/tasksService.js';
 import * as users from '../services/usersService.js';
-import { purgeExpiredCompletedTasks } from '../utils/taskCleanup.js';
+import { purgeExpiredCompletedTasks, purgeAllCompletedTasks } from '../utils/taskCleanup.js';
 
 const router = Router();
+
+function resolveAssigneeIds(body, user) {
+  if (Array.isArray(body.assignee_ids) && body.assignee_ids.length) {
+    return [...new Set(body.assignee_ids.map(Number).filter(Boolean))];
+  }
+  if (body.assigned_user_id) return [Number(body.assigned_user_id)];
+  return [user.id];
+}
 
 router.get('/', authRequired, asyncHandler(async (req, res) => {
   purgeExpiredCompletedTasks().catch((err) => console.error('Cleanup error:', err));
@@ -67,7 +75,7 @@ router.post('/bulk', authRequired, adminRequired, asyncHandler(async (req, res) 
         position: maxPos + 1,
         created_by_id: req.user.id,
         file_location: row.file_location?.trim() || '',
-      });
+      }, [assigneeId]);
 
       await tasks.logStatusChange(created.id, taskStatus, req.user.id, 'Imported from spreadsheet');
       results.created++;
@@ -77,6 +85,11 @@ router.post('/bulk', authRequired, adminRequired, asyncHandler(async (req, res) 
   }
 
   res.json(results);
+}));
+
+router.post('/purge-completed', authRequired, adminRequired, asyncHandler(async (_req, res) => {
+  const deleted = await purgeAllCompletedTasks();
+  res.json({ deleted });
 }));
 
 router.post('/:id/view', authRequired, asyncHandler(async (req, res) => {
@@ -135,33 +148,33 @@ router.get('/:id', authRequired, asyncHandler(async (req, res) => {
 }));
 
 router.post('/', authRequired, asyncHandler(async (req, res) => {
-  const { title, description, assigned_user_id, priority, due_date, status, file_location } = req.body;
+  const { title, description, assigned_user_id, assignee_ids, priority, due_date, status, file_location } = req.body;
 
   if (!title?.trim()) {
     return res.status(400).json({ error: 'Title is required' });
   }
 
+  const ids = resolveAssigneeIds(req.body, req.user);
   const requestedStatus = STATUSES.includes(status) ? status : 'Backlog';
-  const createError = validateTaskCreate(req.user, { assigned_user_id, status: requestedStatus });
+  const createError = validateTaskCreate(req.user, { assigned_user_id: ids[0], assignee_ids: ids, status: requestedStatus });
   if (createError) return res.status(403).json({ error: createError });
 
-  const taskStatus = resolveCreateStatus(req.user, requestedStatus, assigned_user_id);
+  const taskStatus = resolveCreateStatus(req.user, requestedStatus, ids[0]);
   const taskPriority = PRIORITIES.includes(priority) ? priority : 'Medium';
-  const assignee = assigned_user_id || req.user.id;
   const today = new Date().toISOString().split('T')[0];
   const maxPos = await tasks.getMaxPosition(taskStatus);
 
   const created = await tasks.createTask({
     title: title.trim(),
     description: description?.trim() || '',
-    assigned_user_id: assignee,
+    assigned_user_id: ids[0],
     priority: taskPriority,
     due_date: due_date || today,
     status: taskStatus,
     position: maxPos + 1,
     created_by_id: req.user.id,
     file_location: file_location?.trim() || '',
-  });
+  }, ids);
 
   await tasks.logStatusChange(created.id, taskStatus, req.user.id, 'Task created');
   res.status(201).json(formatTask(created));
@@ -200,10 +213,17 @@ router.put('/:id', authRequired, asyncHandler(async (req, res) => {
   const task = await tasks.getTaskById(id);
   if (!task) return res.status(404).json({ error: 'Task not found' });
 
-  const { title, description, assigned_user_id, priority, due_date, status, file_location } = req.body;
+  const { title, description, assigned_user_id, assignee_ids, priority, due_date, status, file_location } = req.body;
   const newStatus = STATUSES.includes(status) ? status : task.status;
+  const newAssigneeIds = assignee_ids !== undefined
+    ? resolveAssigneeIds(req.body, req.user)
+    : undefined;
 
-  const updateError = validateTaskUpdate(req.user, task, { assigned_user_id, status: newStatus });
+  const updateError = validateTaskUpdate(req.user, task, {
+    assigned_user_id,
+    assignee_ids: newAssigneeIds,
+    status: newStatus,
+  });
   if (updateError) return res.status(403).json({ error: updateError });
 
   const statusChanged = newStatus !== task.status;
@@ -215,7 +235,11 @@ router.put('/:id', authRequired, asyncHandler(async (req, res) => {
   if (due_date !== undefined) updates.due_date = due_date || null;
   if (file_location !== undefined) updates.file_location = file_location?.trim() || '';
   updates.status = newStatus;
-  updates.assigned_user_id = assigned_user_id !== undefined ? (assigned_user_id || req.user.id) : task.assigned_user_id;
+  if (newAssigneeIds?.length) {
+    updates.assigned_user_id = newAssigneeIds[0];
+  } else if (assigned_user_id !== undefined) {
+    updates.assigned_user_id = assigned_user_id || req.user.id;
+  }
   updates.completed_at = newStatus === 'Completed' ? new Date().toISOString() : null;
 
   if (statusChanged) {
@@ -227,7 +251,7 @@ router.put('/:id', authRequired, asyncHandler(async (req, res) => {
     await tasks.logStatusChange(id, newStatus, req.user.id);
   }
 
-  const updated = await tasks.updateTask(id, updates);
+  const updated = await tasks.updateTask(id, updates, newAssigneeIds);
   res.json(formatTask(updated));
 }));
 

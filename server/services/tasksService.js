@@ -1,6 +1,7 @@
 import { supabase } from '../supabase.js';
 import { STATUSES } from '../constants.js';
 import { formatTask } from '../utils/taskHelpers.js';
+import { deleteTaskFully } from '../utils/taskCleanup.js';
 
 async function attachUserNames(tasks) {
   if (!tasks.length) return tasks;
@@ -19,55 +20,143 @@ async function attachUserNames(tasks) {
   }));
 }
 
+async function attachAssignees(tasks) {
+  if (!tasks.length) return tasks;
+
+  const taskIds = tasks.map((t) => t.id);
+  const { data: rows, error } = await supabase
+    .from('task_assignees')
+    .select('task_id, user_id, users(id, name, avatar_id)')
+    .in('task_id', taskIds);
+
+  if (error) {
+    return tasks.map((t) => ({
+      ...t,
+      assignee_ids: t.assigned_user_id ? [t.assigned_user_id] : [],
+      assignees: t.assigned_user_id
+        ? [{ id: t.assigned_user_id, name: t.assigned_user_name, avatar_id: 1 }]
+        : [],
+    }));
+  }
+
+  const byTask = {};
+  for (const row of rows || []) {
+    if (!byTask[row.task_id]) byTask[row.task_id] = [];
+    byTask[row.task_id].push({
+      id: row.user_id,
+      name: row.users?.name || 'Unknown',
+      avatar_id: row.users?.avatar_id ?? 1,
+    });
+  }
+
+  return tasks.map((t) => {
+    const assignees = byTask[t.id] || (t.assigned_user_id
+      ? [{ id: t.assigned_user_id, name: t.assigned_user_name, avatar_id: 1 }]
+      : []);
+    return {
+      ...t,
+      assignees,
+      assignee_ids: assignees.map((a) => a.id),
+    };
+  });
+}
+
+export async function setTaskAssignees(taskId, userIds) {
+  const uniqueIds = [...new Set(userIds.filter(Boolean))];
+  await supabase.from('task_assignees').delete().eq('task_id', taskId);
+  if (uniqueIds.length) {
+    const { error } = await supabase.from('task_assignees').insert(
+      uniqueIds.map((user_id) => ({ task_id: taskId, user_id }))
+    );
+    if (error) throw error;
+  }
+  return uniqueIds;
+}
+
+async function enrichTasks(tasks) {
+  const withNames = await attachUserNames(tasks);
+  return attachAssignees(withNames);
+}
+
 export async function getTaskById(id) {
   const { data, error } = await supabase.from('tasks').select('*').eq('id', id).single();
   if (error && error.code !== 'PGRST116') throw error;
   if (!data) return null;
-  const [withNames] = await attachUserNames([data]);
-  return withNames;
+  const [enriched] = await enrichTasks([data]);
+  return enriched;
 }
 
 export async function getTasks({ assignedUserId, status } = {}) {
+  let taskIds = null;
+
+  if (assignedUserId) {
+    const { data: assigneeRows, error: assigneeError } = await supabase
+      .from('task_assignees')
+      .select('task_id')
+      .eq('user_id', assignedUserId);
+
+    if (assigneeError) {
+      const { data: fallback } = await supabase
+        .from('tasks')
+        .select('id')
+        .eq('assigned_user_id', assignedUserId);
+      taskIds = (fallback || []).map((t) => t.id);
+    } else {
+      taskIds = [...new Set((assigneeRows || []).map((r) => r.task_id))];
+      if (!taskIds.length) return [];
+    }
+  }
+
   let q = supabase
     .from('tasks')
     .select('*, assigned_user:users!assigned_user_id(name), creator:users!created_by_id(name)')
     .order('status')
     .order('position')
     .order('id');
-  if (assignedUserId) q = q.eq('assigned_user_id', assignedUserId);
+
+  if (taskIds) q = q.in('id', taskIds);
   if (status) q = q.eq('status', status);
 
   const { data, error } = await q;
   if (error) {
     let fallback = supabase.from('tasks').select('*').order('status').order('position').order('id');
-    if (assignedUserId) fallback = fallback.eq('assigned_user_id', assignedUserId);
+    if (taskIds) fallback = fallback.in('id', taskIds);
     if (status) fallback = fallback.eq('status', status);
     const { data: rows, error: fallbackError } = await fallback;
     if (fallbackError) throw fallbackError;
-    return attachUserNames(rows || []);
+    return enrichTasks(rows || []);
   }
 
-  return (data || []).map((t) => ({
+  const mapped = (data || []).map((t) => ({
     ...t,
     assigned_user_name: t.assigned_user?.name || null,
     created_by_name: t.creator?.name || null,
     assigned_user: undefined,
     creator: undefined,
   }));
+
+  return enrichTasks(mapped);
 }
 
-export async function createTask(fields) {
+export async function createTask(fields, assigneeIds = null) {
   const { data, error } = await supabase.from('tasks').insert(fields).select('*').single();
   if (error) throw error;
-  const [withNames] = await attachUserNames([data]);
-  return withNames;
+
+  const ids = assigneeIds?.length ? assigneeIds : (fields.assigned_user_id ? [fields.assigned_user_id] : []);
+  if (ids.length) await setTaskAssignees(data.id, ids);
+
+  return getTaskById(data.id);
 }
 
-export async function updateTask(id, fields) {
+export async function updateTask(id, fields, assigneeIds = undefined) {
   const { data, error } = await supabase.from('tasks').update(fields).eq('id', id).select('*').single();
   if (error) throw error;
-  const [withNames] = await attachUserNames([data]);
-  return withNames;
+
+  if (assigneeIds !== undefined) {
+    await setTaskAssignees(id, assigneeIds);
+  }
+
+  return getTaskById(data.id);
 }
 
 export async function deleteTask(id) {

@@ -25,6 +25,8 @@ export function formatTask(row) {
     created_at: row.created_at,
     completed_at: row.completed_at,
     file_location: row.file_location || '',
+    assignee_ids: row.assignee_ids || [],
+    assignees: row.assignees || [],
     unread_count: row.unread_count ?? 0,
   };
 }
@@ -41,36 +43,38 @@ export function resolveCreateStatus(user, requestedStatus, assignedUserId) {
   return requestedStatus;
 }
 
-export function validateTaskCreate(user, { assigned_user_id, status }) {
-  const assigneeId = assigned_user_id || user.id;
+export function validateTaskCreate(user, { assigned_user_id, assignee_ids, status }) {
+  const ids = assignee_ids?.length ? assignee_ids : [assigned_user_id || user.id];
+  const primaryId = ids[0];
 
-  if (!isAdmin(user) && assigneeId !== user.id) {
-    return 'You can only create tasks for yourself';
-  }
-
-  if (!isAdmin(user) && !canAssignToOthers(user) && assigneeId !== user.id) {
-    return 'You do not have permission to assign tasks to others';
+  if (!isAdmin(user) && ids.some((id) => id !== user.id)) {
+    if (!canAssignToOthers(user)) {
+      return 'You do not have permission to assign tasks to others';
+    }
   }
 
   if (!isAdmin(user) && !CREATE_STATUSES.includes(status)) {
     return 'You can only create tasks in Backlog or To Do';
   }
 
-  if (!isAdmin(user) && status === 'Backlog' && assigneeId !== user.id) {
+  if (!isAdmin(user) && status === 'Backlog' && primaryId !== user.id) {
     return 'Backlog tasks can only be created for yourself';
   }
 
   return null;
 }
 
-export function validateTaskUpdate(user, task, { assigned_user_id, status }) {
+export function validateTaskUpdate(user, task, { assigned_user_id, assignee_ids, status }) {
   if (!canAccessTask(user, task)) {
     return 'You can only edit your assigned tasks';
   }
 
-  if (assigned_user_id !== undefined && assigned_user_id !== task.assigned_user_id) {
-    if (!isAdmin(user) && !canAssignToOthers(user)) {
-      return 'You do not have permission to reassign tasks';
+  if (assignee_ids !== undefined || assigned_user_id !== undefined) {
+    const newIds = assignee_ids?.length ? assignee_ids : (assigned_user_id ? [assigned_user_id] : null);
+    if (newIds && !isAdmin(user) && !canAssignToOthers(user)) {
+      const currentIds = task.assignee_ids?.length ? task.assignee_ids : [task.assigned_user_id];
+      const changed = newIds.length !== currentIds.length || newIds.some((id) => !currentIds.includes(id));
+      if (changed) return 'You do not have permission to reassign tasks';
     }
   }
 

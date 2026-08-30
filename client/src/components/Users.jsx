@@ -168,6 +168,16 @@ export default function Users() {
     }
   };
 
+  const handlePermanentDelete = async (user) => {
+    if (!confirm(`PERMANENTLY delete "${user.name}"? This cannot be undone. Their tasks will remain but lose this assignee.`)) return;
+    try {
+      await api.deleteUserPermanent(user.id);
+      loadUsers();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
   if (loading) return <div className="loading-screen">Loading...</div>;
 
   return (
@@ -219,8 +229,9 @@ export default function Users() {
                     <td>
                       <button className="btn btn-secondary btn-sm" onClick={() => setEditingUser(user)} style={{ marginRight: 6 }}>Edit</button>
                       {!user.disabled && (
-                        <button className="btn btn-danger btn-sm" onClick={() => handleDisable(user)}>Disable</button>
+                        <button className="btn btn-danger btn-sm" onClick={() => handleDisable(user)} style={{ marginRight: 6 }}>Disable</button>
                       )}
+                      <button className="btn btn-danger btn-sm" onClick={() => handlePermanentDelete(user)}>Delete</button>
                     </td>
                   </tr>
                 ))}

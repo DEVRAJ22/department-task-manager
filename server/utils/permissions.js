@@ -13,6 +13,7 @@ export function formatUser(user) {
     disabled: !!user.disabled,
     can_assign: !!user.can_assign,
     can_verify: !!user.can_verify,
+    avatar_id: user.avatar_id ?? 1,
     created_at: user.created_at,
   };
 }
@@ -36,5 +37,7 @@ export function canMoveToStatus(user, status) {
 
 export function canAccessTask(user, task) {
   if (isAdmin(user)) return true;
-  return task.assigned_user_id === user.id;
+  if (task.assigned_user_id === user.id) return true;
+  if (task.assignee_ids?.includes(user.id)) return true;
+  return false;
 }

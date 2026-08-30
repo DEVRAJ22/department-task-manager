@@ -24,6 +24,22 @@ export async function deleteTaskFully(taskId) {
   if (error) throw error;
 }
 
+export async function purgeAllCompletedTasks() {
+  const { data: completed, error } = await supabase
+    .from('tasks')
+    .select('id')
+    .eq('status', 'Completed');
+
+  if (error) throw error;
+  if (!completed?.length) return 0;
+
+  for (const task of completed) {
+    await deleteTaskFully(task.id);
+  }
+
+  return completed.length;
+}
+
 export async function purgeExpiredCompletedTasks() {
   const cutoff = new Date(Date.now() - RETENTION_MS).toISOString();
 

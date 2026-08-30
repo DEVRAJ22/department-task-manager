@@ -47,6 +47,9 @@ export const api = {
   resetPassword: (id, password) =>
     request(`/users/${id}/reset-password`, { method: 'POST', body: JSON.stringify({ password }) }),
   deleteUser: (id) => request(`/users/${id}`, { method: 'DELETE' }),
+  deleteUserPermanent: (id) => request(`/users/${id}?permanent=true`, { method: 'DELETE' }),
+  updateAvatar: (avatar_id) =>
+    request('/users/profile/avatar', { method: 'PUT', body: JSON.stringify({ avatar_id }) }),
   changePassword: (currentPassword, newPassword) =>
     request('/users/profile/password', { method: 'PUT', body: JSON.stringify({ currentPassword, newPassword }) }),
 
@@ -66,6 +69,7 @@ export const api = {
   deleteTask: (id) => request(`/tasks/${id}`, { method: 'DELETE' }),
   markTaskViewed: (id) => request(`/tasks/${id}/view`, { method: 'POST' }),
   importTasks: (tasks) => request('/tasks/bulk', { method: 'POST', body: JSON.stringify({ tasks }) }),
+  purgeCompletedTasks: () => request('/tasks/purge-completed', { method: 'POST' }),
 
   getComments: (taskId) => request(`/comments/task/${taskId}`),
   addComment: (taskId, content) =>

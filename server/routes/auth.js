@@ -42,8 +42,9 @@ router.post('/logout', (_req, res) => {
   res.json({ ok: true });
 });
 
-router.get('/me', authRequired, (req, res) => {
-  res.json({ user: req.user });
-});
+router.get('/me', authRequired, asyncHandler(async (req, res) => {
+  const fresh = await users.getUserById(req.user.id);
+  res.json({ user: formatUser(fresh || req.user) });
+}));
 
 export default router;

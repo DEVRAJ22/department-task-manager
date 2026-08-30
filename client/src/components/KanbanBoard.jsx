@@ -5,6 +5,17 @@ import { useAuth } from '../context/AuthContext';
 import TaskPanel from './TaskPanel';
 import { prioritySort, priorityBorderClass } from '../utils/priority';
 import { IconSort } from './Icons';
+import UserAvatar from './UserAvatar';
+
+function taskHasAssignee(task, userId) {
+  return task.assignee_ids?.includes(Number(userId)) || String(task.assigned_user_id) === String(userId);
+}
+
+function assigneeLabel(task) {
+  const names = (task.assignees || []).map((a) => a.name);
+  if (names.length) return names.join(', ');
+  return task.assigned_user_name || 'Unassigned';
+}
 
 function todayStr() {
   return new Date().toISOString().split('T')[0];
@@ -40,9 +51,14 @@ function KanbanCard({ task, index, onClick }) {
             <PriorityBadge priority={task.priority} />
           </div>
           <div className="kanban-card-details">
-            <span className="kanban-card-assignee" title="Assigned to">
-              👤 {task.assigned_user_name || 'Unassigned'}
-            </span>
+            <div className="kanban-card-assignees">
+              {(task.assignees || []).slice(0, 3).map((a) => (
+                <UserAvatar key={a.id} user={a} size={20} />
+              ))}
+              <span className="kanban-card-assignee" title="Assigned to">
+                {assigneeLabel(task)}
+              </span>
+            </div>
             <span className={`kanban-card-due${isOverdue ? ' overdue' : ''}`} title="Due date">
               📅 {formatDate(task.due_date)}
             </span>
@@ -122,6 +138,7 @@ export default function KanbanBoard() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [prioritySortEnabled, setPrioritySortEnabled] = useState(false);
+  const [clearing, setClearing] = useState(false);
 
   const canComplete = isAdmin || canVerify;
   const allowedDropStatuses = canComplete ? STATUSES : USER_MOVABLE_STATUSES;
@@ -139,7 +156,7 @@ export default function KanbanBoard() {
 
     const filterId = columnFilters[status];
     if (filterId) {
-      columnTasks = columnTasks.filter((t) => String(t.assigned_user_id) === filterId);
+      columnTasks = columnTasks.filter((t) => taskHasAssignee(t, filterId));
     }
 
     columnTasks = prioritySortEnabled
@@ -152,8 +169,13 @@ export default function KanbanBoard() {
   const getColumnAssignees = (status) => {
     const map = new Map();
     tasks
-      .filter((t) => t.status === status && t.assigned_user_id)
-      .forEach((t) => map.set(t.assigned_user_id, { id: t.assigned_user_id, name: t.assigned_user_name }));
+      .filter((t) => t.status === status)
+      .forEach((t) => {
+        (t.assignees || []).forEach((a) => map.set(a.id, a));
+        if (t.assigned_user_id && !map.has(t.assigned_user_id)) {
+          map.set(t.assigned_user_id, { id: t.assigned_user_id, name: t.assigned_user_name });
+        }
+      });
     return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
   };
 
@@ -167,7 +189,7 @@ export default function KanbanBoard() {
     if (!filterId) return filteredIndex;
 
     const unfiltered = getUnfilteredColumnTasks(status);
-    const filtered = unfiltered.filter((t) => String(t.assigned_user_id) === filterId);
+    const filtered = unfiltered.filter((t) => taskHasAssignee(t, filterId));
     const target = filtered[filteredIndex];
 
     if (target) return unfiltered.findIndex((t) => t.id === target.id);
@@ -219,6 +241,22 @@ export default function KanbanBoard() {
     setSelectedTask(null);
   };
 
+  const handleClearCompleted = async () => {
+    if (!confirm('Permanently delete all completed tasks and their files?')) return;
+    setClearing(true);
+    setError('');
+    try {
+      const { deleted } = await api.purgeCompletedTasks();
+      setTasks((prev) => prev.filter((t) => t.status !== 'Completed'));
+      if (selectedTask?.status === 'Completed') setSelectedTask(null);
+      alert(`Cleared ${deleted} completed task(s).`);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setClearing(false);
+    }
+  };
+
   const handleTaskCreate = (created) => {
     setTasks((prev) => [...prev, created]);
     setShowCreate(false);
@@ -262,6 +300,17 @@ export default function KanbanBoard() {
                 <div className="kanban-column-header">
                   <span className="kanban-column-title">{status}</span>
                   <div className="kanban-column-actions">
+                    {status === 'Completed' && isAdmin && (
+                      <button
+                        type="button"
+                        className="btn btn-danger btn-sm kanban-clear-btn"
+                        onClick={handleClearCompleted}
+                        disabled={clearing || allInColumn === 0}
+                        title="Clear all completed tasks"
+                      >
+                        {clearing ? '...' : 'Clear'}
+                      </button>
+                    )}
                     <ColumnFilter
                       assignees={getColumnAssignees(status)}
                       value={columnFilters[status] || ''}
