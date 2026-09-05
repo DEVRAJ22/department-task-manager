@@ -99,7 +99,9 @@ export default function TaskPanel({ task, defaultStatus, onClose, onUpdate, onCr
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
-  const toggleAssignee = (userId) => {
+  const toggleAssignee = (userId, e) => {
+    e?.preventDefault?.();
+    e?.stopPropagation?.();
     const id = String(userId);
     setForm((prev) => {
       const ids = prev.assignee_ids.includes(id)
@@ -291,19 +293,21 @@ export default function TaskPanel({ task, defaultStatus, onClose, onUpdate, onCr
 
           <div className="form-group">
             <label>Assigned To {form.assignee_ids.length > 1 ? `(${form.assignee_ids.length} co-assignees)` : ''}</label>
-            <div className="assignee-picker">
-              {users.map((u) => (
-                <label key={u.id} className={`assignee-chip${form.assignee_ids.includes(String(u.id)) ? ' selected' : ''}`}>
-                  <input
-                    type="checkbox"
-                    checked={form.assignee_ids.includes(String(u.id))}
-                    onChange={() => toggleAssignee(u.id)}
+            <div className="assignee-picker" onClick={(e) => e.stopPropagation()}>
+              {users.map((u) => {
+                const selected = form.assignee_ids.includes(String(u.id));
+                return (
+                  <button
+                    key={u.id}
+                    type="button"
+                    className={`assignee-chip${selected ? ' selected' : ''}`}
+                    onClick={(e) => toggleAssignee(u.id, e)}
                     disabled={!isAdmin && !canAssign && u.id !== user.id}
-                    hidden
-                  />
-                  {u.name}
-                </label>
-              ))}
+                  >
+                    {u.name}
+                  </button>
+                );
+              })}
             </div>
             <p className="form-hint">Select one or more users. Card moves sync for all assignees.</p>
           </div>
@@ -404,7 +408,11 @@ export default function TaskPanel({ task, defaultStatus, onClose, onUpdate, onCr
               <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 8 }}>
                 Created by {task.created_by_name} on {new Date(task.created_at).toLocaleDateString()}
               </div>
+            </>
+          )}
+          </fieldset>
 
+          {!isNew && (
               <div className="comments-section">
                 <h3>Comments ({comments.length})</h3>
                 {comments.map((c) => (
@@ -437,17 +445,15 @@ export default function TaskPanel({ task, defaultStatus, onClose, onUpdate, onCr
                   </div>
                 </form>
               </div>
-            </>
           )}
-          </fieldset>
         </div>
 
         <div className="task-panel-footer">
           {!isNew && (
-            <button className="btn btn-danger" onClick={handleDelete} style={{ marginRight: 'auto' }} disabled={blocked}>Delete</button>
+            <button type="button" className="btn btn-danger" onClick={handleDelete} style={{ marginRight: 'auto' }} disabled={blocked}>Delete</button>
           )}
-          <button className="btn btn-secondary" onClick={onClose} disabled={blocked}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleSave} disabled={blocked}>
+          <button type="button" className="btn btn-secondary" onClick={onClose} disabled={blocked}>Cancel</button>
+          <button type="button" className="btn btn-primary" onClick={handleSave} disabled={blocked}>
             {saving ? 'Saving...' : isNew ? 'Create' : 'Save'}
           </button>
         </div>

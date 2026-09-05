@@ -84,7 +84,7 @@ function ColumnFilter({ assignees, value, onChange }) {
       </button>
       {open && (
         <div className="filter-dropdown">
-          <button type="button" className={!value ? 'active' : ''} onClick={() => { onChange(''); setOpen(false); }}>
+          <button type="button" className={!value ? 'active' : ''} onClick={(e) => { e.stopPropagation(); onChange(''); setOpen(false); }}>
             All assignees
           </button>
           {assignees.map((a) => (
@@ -92,7 +92,7 @@ function ColumnFilter({ assignees, value, onChange }) {
               key={a.id}
               type="button"
               className={String(value) === String(a.id) ? 'active' : ''}
-              onClick={() => { onChange(String(a.id)); setOpen(false); }}
+              onClick={(e) => { e.stopPropagation(); onChange(String(a.id)); setOpen(false); }}
             >
               {a.name}
             </button>

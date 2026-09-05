@@ -1570,6 +1570,7 @@ tr:hover td {
   cursor: pointer;
   transition: all 0.15s;
   user-select: none;
+  font-family: inherit;
 }
 
 .assignee-chip:hover {
@@ -1580,6 +1581,11 @@ tr:hover td {
   background: var(--primary);
   color: #fff;
   border-color: var(--primary);
+}
+
+.assignee-chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 [data-theme="dark"] .assignee-chip.selected {

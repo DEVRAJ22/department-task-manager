@@ -10,8 +10,10 @@ export default function UserAvatar({ user, size = 32, className = '' }) {
       src={avatarUrl(id)}
       alt={name || 'User'}
       title={name}
+      draggable={false}
       className={`user-avatar${className ? ` ${className}` : ''}`}
       style={{ width: px, height: px }}
+      onDragStart={(e) => e.preventDefault()}
       onError={(e) => {
         e.target.onerror = null;
         e.target.src = '';
